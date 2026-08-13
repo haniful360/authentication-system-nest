@@ -111,33 +111,29 @@ export class ConversatonService {
     creatorId: string,
     groupMenmbers: string[],
   ) {
-    try {
-      if (!creatorId) {
-        throw new NotFoundException('user not found');
-      }
-
-      return await this.prisma.client.conversation.create({
-        data: {
-          name,
-          conversationType: 'group',
-          participents: {
-            create: [
-              { userId: creatorId, role: 'admin' as const },
-              ...groupMenmbers.map((id) => ({
-                userId: id,
-                role: 'user' as const,
-              })),
-            ],
-          },
-        },
-        include: {
-          participents: {
-            include: { sender: true },
-          },
-        },
-      });
-    } catch (error) {
-      throw error;
+    if (!creatorId) {
+      throw new NotFoundException('user not found');
     }
+
+    return this.prisma.client.conversation.create({
+      data: {
+        name,
+        conversationType: 'group',
+        participents: {
+          create: [
+            { userId: creatorId, role: 'admin' as const },
+            ...groupMenmbers.map((id) => ({
+              userId: id,
+              role: 'user' as const,
+            })),
+          ],
+        },
+      },
+      include: {
+        participents: {
+          include: { sender: true },
+        },
+      },
+    });
   }
 }
