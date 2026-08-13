@@ -10,55 +10,80 @@ import { UnauthorizedException } from '@nestjs/common';
 import jwt from 'jsonwebtoken';
 import { Server, Socket } from 'socket.io';
 
+interface AuthenticatedSocket extends Socket {
+  data: {
+    userId?: string;
+  };
+}
+
 @WebSocketGateway({ origin: '*' })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private readonly chatService: MessageService) {}
 
-  @WebSocketServer() server: Server;
+  @WebSocketServer() server: Server | undefined;
 
   connectedUsers = new Map<string, Set<string>>();
 
-  async handleConnection(client: any) {
-    let bearerToken = client.handshake.headers.authorization as string;
+  handleConnection(client: AuthenticatedSocket) {
+    try {
+      let bearerToken: string | undefined =
+        client.handshake.headers.authorization;
 
-    if (!bearerToken) bearerToken = client.handshake.auth?.token;
+      if (!bearerToken) {
+        bearerToken = client.handshake.auth?.token as string | undefined;
+      }
 
-    if (!bearerToken) bearerToken = client.handshake.query.token as string;
+      if (!bearerToken) {
+        bearerToken = client.handshake.query.token as string | undefined;
+      }
 
-    let token = bearerToken.startsWith('Bearer ')
-      ? bearerToken?.split(' ')[1]
-      : bearerToken;
+      if (!bearerToken) {
+        throw new UnauthorizedException('Token not provided');
+      }
 
-    if (!token) throw new UnauthorizedException('Token not provided');
+      const token = bearerToken.startsWith('Bearer ')
+        ? bearerToken.split(' ')[1]
+        : bearerToken;
 
-    const user = jwt.verify(token, process.env.JWT_SECRET as string) as any;
-    const userId = user.sub;
+      if (!token) throw new UnauthorizedException('Token not provided');
 
-    if (!userId) throw new UnauthorizedException('Invalid token');
+      const secret = (process.env.JWT_SECRET as string) || 'jsjlaiajf';
+      const user = jwt.verify(token, secret) as { sub?: string };
+      const userId = user.sub;
 
-    if (!this.connectedUsers.has(userId)) {
-      this.connectedUsers.set(userId, new Set());
+      if (!userId) throw new UnauthorizedException('Invalid token');
+
+      if (!this.connectedUsers.has(userId)) {
+        this.connectedUsers.set(userId, new Set());
+      }
+      this.connectedUsers.get(userId)!.add(client.id);
+
+      client.data.userId = userId;
+    } catch {
+      client.disconnect(true);
     }
-    this.connectedUsers.get(userId)!.add(client.id);
-
-    client.data.userId = userId;
   }
 
-  async handleDisconnect(client: any) {
+  handleDisconnect(client: AuthenticatedSocket) {
     const userId = client.data.userId;
 
-    const clientUserSet = this.connectedUsers.get(userId);
-    if (clientUserSet) {
-      clientUserSet.delete(client.id);
-      if (clientUserSet.size === 0) {
-        this.connectedUsers.delete(userId);
+    if (userId) {
+      const clientUserSet = this.connectedUsers.get(userId);
+      if (clientUserSet) {
+        clientUserSet.delete(client.id);
+        if (clientUserSet.size === 0) {
+          this.connectedUsers.delete(userId);
+        }
       }
     }
   }
 
-  //Direct message
+  // Direct message
   @SubscribeMessage('join-conversation')
-  async joinConversation(client: Socket, payload: { conversationId: string }) {
+  async joinConversation(
+    client: AuthenticatedSocket,
+    payload: { conversationId: string },
+  ) {
     const userId = client.data.userId;
     if (!userId) throw new UnauthorizedException();
 
@@ -67,7 +92,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send-message')
   async sendMessage(
-    client: Socket,
+    client: AuthenticatedSocket,
     payload: { conversationId: string; message: string },
   ) {
     const userId = client.data.userId;
@@ -78,9 +103,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server.to(payload.conversationId).emit('receive-message', message);
   }
 
-  //Group message
+  // Group message
   @SubscribeMessage('join-group')
-  async joinGroup(client: Socket, payload: { conversation: string }) {
+  async joinGroup(
+    client: AuthenticatedSocket,
+    payload: { conversation: string },
+  ) {
     const userId = client.data.userId;
     if (!userId) {
       throw new UnauthorizedException('User not authenticated');
@@ -90,7 +118,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   @SubscribeMessage('send-group-message')
   async sendGroupMessage(
-    client: Socket,
+    client: AuthenticatedSocket,
     payload: {
       conversationId: string;
       message: string;
