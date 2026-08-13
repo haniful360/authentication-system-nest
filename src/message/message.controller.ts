@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { JwtGuard } from '@/lib/guards/jwt/jwt.guard';
 import { CurrentUser } from '@/lib/decorators/user.decorator';
@@ -9,7 +9,7 @@ export class MessageController {
 
   @Post('create')
   @UseGuards(JwtGuard)
-  async createMessage(
+  createMessage(
     @Body()
     body: {
       conversationId: string;
@@ -23,16 +23,16 @@ export class MessageController {
 
   @Get('get-messages')
   @UseGuards(JwtGuard)
-  async getMessages(
-    @Body() body: { conversationId: string },
+  getMessages(
+    @Query('conversationId') conversationId: string,
     @CurrentUser() user: { sub: string; email: string },
   ) {
-    return this.messageService.getMessages(body.conversationId, user.sub);
+    return this.messageService.getMessages(conversationId, user.sub);
   }
 
   @Get('get-conversation-participants')
   @UseGuards(JwtGuard)
-  async getConversation(conversationId: string) {
+  getConversation(@Query('conversationId') conversationId: string) {
     return this.messageService.getConversationParticipants(conversationId);
   }
 }
