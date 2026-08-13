@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
-import { Strategy, VerifyCallback } from 'passport-google-oauth20';
+import { Strategy, Profile, VerifyCallback } from 'passport-google-oauth20';
 import { PrismaService } from '../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 
@@ -11,9 +11,12 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
     private jwtService: JwtService,
   ) {
     super({
-      clientID: process.env.OAUTH_CLIENT as string,
-      clientSecret: process.env.OAUTH_CLIENT_SECRET as string,
-      callbackURL: 'http://localhost:9999/auth/google/callback',
+      clientID: (process.env.OAUTH_CLIENT as string) || 'dummy_client_id',
+      clientSecret:
+        (process.env.OAUTH_CLIENT_SECRET as string) || 'dummy_client_secret',
+      callbackURL:
+        process.env.GOOGLE_CALLBACK_URL ||
+        'http://localhost:3000/auth/google/callback',
       scope: ['email', 'profile'],
     });
   }
@@ -21,30 +24,32 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   async validate(
     _accessToken: string,
     _refreshToken: string,
-    profile: any,
+    profile: Profile,
     done: VerifyCallback,
   ) {
-    const { emails, photos } = profile;
+    const email = profile.emails?.[0]?.value || '';
+    const photo = profile.photos?.[0]?.value || '';
+    const displayName = profile.displayName || '';
 
     const user = await this.prisma.client.user.upsert({
       where: {
-        email: emails[0].value,
+        email,
       },
       create: {
-        full_name: profile.displayName,
-        email: emails[0].value,
+        full_name: displayName,
+        email,
         role: 'student',
-        profilePicture: photos[0].value,
+        profilePicture: photo,
       },
       update: {
-        full_name: profile.displayName,
+        full_name: displayName,
         role: 'student',
-        profilePicture: photos[0].value,
+        profilePicture: photo,
       },
     });
 
     const accessToken = this.jwtService.sign(
-      { id: user.id, email: user.email, role: user.role },
+      { sub: user.id, email: user.email, role: user.role },
       {
         secret: (process.env.JWT_SECRET as string) || 'jsjlaiajf',
         expiresIn: '1h',
