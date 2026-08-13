@@ -12,8 +12,6 @@ import { PaymentModule } from './payment/payment.module';
 import { CacheModule } from '@nestjs/cache-manager';
 import { MessageModule } from './message/message.module';
 import { ConversatonModule } from './conversaton/conversaton.module';
-import { ChatGateway } from './message/message.gataway';
-import { MessageService } from './message/message.service';
 
 @Module({
   imports: [
@@ -26,7 +24,7 @@ import { MessageService } from './message/message.service';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     MailerModule.forRoot({
       transport: {
-        host: 'https://gmail.com',
+        host: 'smtp.gmail.com',
         service: 'gmail',
         auth: {
           user: process.env.GMAIL_USER,
@@ -49,6 +47,6 @@ import { MessageService } from './message/message.service';
     ConversatonModule,
   ],
   controllers: [AppController],
-  providers: [AppService, JwtService, ChatGateway, MessageService],
+  providers: [AppService, JwtService],
 })
 export class AppModule {}

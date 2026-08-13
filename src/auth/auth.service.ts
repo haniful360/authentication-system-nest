@@ -18,56 +18,53 @@ export class AuthService {
     private prisma: PrismaService,
     private jwtService: JwtService,
   ) {}
+
   async login(data: LoginDto, req: Request) {
-    try {
-      const user = await this.prisma.client.user.findFirst({
-        where: {
-          email: data.email,
-        },
-      });
-      if (!user) {
-        throw new NotFoundException('Account not found');
-      }
-
-      if (!user.password) {
-        throw new ForbiddenException(
-          'This account may be made by google authentication',
-        );
-      }
-
-      const isPassValid = await bcrypt.compare(data.password, user.password);
-
-      if (!isPassValid) {
-        throw new UnauthorizedException('Invalid password');
-      }
-
-      const { password, ...result } = user;
-
-      const tokens = this.generateToken(user);
-
-      const userAgent = req.header('User-Agent');
-
-      const parser = new UAParser(userAgent);
-
-      const session = await this.prisma.client.sessions.create({
-        data: {
-          userId: user.id,
-          jwtToken: tokens.accessToken,
-          ip: req.ip,
-          device: parser.getOS().name,
-          expiresAt: new Date(Date.now() + 60 * 60 * 1000),
-        },
-      });
-
-      return {
-        message: 'User logged in successfully',
-        result,
-        accessToken: tokens.accessToken,
-        session,
-      };
-    } catch (error) {
-      throw error;
+    const user = await this.prisma.client.user.findFirst({
+      where: {
+        email: data.email,
+      },
+    });
+    if (!user) {
+      throw new NotFoundException('Account not found');
     }
+
+    if (!user.password) {
+      throw new ForbiddenException(
+        'This account may be made by google authentication',
+      );
+    }
+
+    const isPassValid = await bcrypt.compare(data.password, user.password);
+
+    if (!isPassValid) {
+      throw new UnauthorizedException('Invalid password');
+    }
+
+    const result = { ...user };
+    delete (result as Partial<User>).password;
+
+    const tokens = this.generateToken(user);
+
+    const userAgent = req.header('User-Agent');
+    const parser = new UAParser(userAgent);
+
+    const session = await this.prisma.client.sessions.create({
+      data: {
+        userId: user.id,
+        jwtToken: tokens.accessToken,
+        ip: req.ip,
+        device: parser.getOS().name,
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      },
+    });
+
+    return {
+      message: 'User logged in successfully',
+      result,
+      accessToken: tokens.accessToken,
+      session,
+    };
   }
 
   private generateToken(user: User) {
@@ -104,17 +101,13 @@ export class AuthService {
 
     const payload = req.user;
 
-    try {
-      const sessions = await this.prisma.client.sessions.findMany({
-        where: {
-          userId: payload.sub,
-        },
-        orderBy: { expiresAt: 'desc' },
-      });
-      return sessions;
-    } catch (error) {
-      throw error;
-    }
+    const sessions = await this.prisma.client.sessions.findMany({
+      where: {
+        userId: payload.sub,
+      },
+      orderBy: { expiresAt: 'desc' },
+    });
+    return sessions;
   }
 
   async removeAllSession(req: Request) {
@@ -125,37 +118,31 @@ export class AuthService {
 
     const token = req.headers['authorization']?.split(' ')[1];
 
-    console.log(token);
+    await this.prisma.client.sessions.deleteMany({
+      where: {
+        userId: payload.sub,
+        NOT: { jwtToken: token },
+      },
+    });
 
-    try {
-      await this.prisma.client.sessions.deleteMany({
-        where: {
-          userId: payload.sub,
-          NOT: { jwtToken: token },
-        },
-      });
-
-      return {
-        message: 'Removed all sessions',
-      };
-    } catch (error) {
-      throw error;
-    }
+    return {
+      message: 'Removed all sessions',
+    };
   }
+
   async removeSession(sessionId: string) {
-    try {
-      await this.prisma.client.sessions.delete({
-        where: { id: sessionId },
-      });
-      return {
-        message: 'Session removed',
-      };
-    } catch (error) {
-      throw error;
-    }
+    await this.prisma.client.sessions.delete({
+      where: { id: sessionId },
+    });
+    return {
+      message: 'Session removed',
+    };
   }
 
-  async handleJwtAuthCallback(data: any, req: Request) {
+  async handleJwtAuthCallback(
+    data: { user: User; accessToken: string },
+    req: Request,
+  ) {
     const { user, accessToken } = data;
 
     const userAgent = req.header('User-Agent');
@@ -173,8 +160,8 @@ export class AuthService {
 
     return {
       message: 'User logged in successfully',
-      result: data.user,
-      accessToken: accessToken,
+      result: user,
+      accessToken,
       session,
     };
   }

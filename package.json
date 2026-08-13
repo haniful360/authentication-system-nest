@@ -45,6 +45,7 @@
     "class-validator": "^0.14.3",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
     "express-rate-limit": "^8.2.1",
     "express-session": "^1.18.2",
     "nodemailer": "^7.0.11",
@@ -108,6 +109,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/$1",
+      "^@prisma$": "<rootDir>/../prisma/generated/client"
+    }
   }
 }

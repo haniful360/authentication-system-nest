@@ -6,6 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { Request } from 'express';
 
 @Injectable()
 export class JwtGuard implements CanActivate {
@@ -13,14 +14,21 @@ export class JwtGuard implements CanActivate {
     private jwtService: JwtService,
     private prisma: PrismaService,
   ) {}
+
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const req = context.switchToHttp().getRequest();
-    const token = req.headers['authorization']?.split(' ')[1];
+    const req = context.switchToHttp().getRequest<Request>();
+    const authHeader = req.headers['authorization'];
+    const token =
+      typeof authHeader === 'string' ? authHeader.split(' ')[1] : undefined;
 
     if (!token) return false;
 
     try {
-      const payload = this.jwtService.verify(token, {
+      const payload = this.jwtService.verify<{
+        sub: string;
+        email: string;
+        role: string;
+      }>(token, {
         secret: process.env.JWT_SECRET || 'jsjlaiajf',
       });
 
@@ -37,10 +45,8 @@ export class JwtGuard implements CanActivate {
       if (!session) return false;
 
       req.user = payload;
-      req.session = session;
-
       return true;
-    } catch (error) {
+    } catch {
       return false;
     }
   }
